@@ -1,7 +1,12 @@
 debug = false
 
+# Set logging level to INFO for testing, ERROR for production
+# Available options: DEBUG, INFO, WARN, ERROR (the default), FATAL and PANIC
 logLevel = "ERROR"
-defaultEntryPoints = ["https","http"]
+
+# Entrypoints to be used by frontends that do not specify any entrypoint.
+# Each frontend can specify its own entrypoints.
+defaultEntryPoints = ["https", "http"]
 
 [entryPoints]
   [entryPoints.http]
@@ -21,9 +26,29 @@ watch = true
 exposedByDefault = false
 
 [acme]
+email = "webmaster@approov.io"
 storage = "acme.json"
+# Uncomment for testing to avoid triggering Let'sEncrypt's rate limiting
+# caServer = "https://acme-staging-v02.api.letsencrypt.org/directory"
+# Uncomment for testing
+# acmeLogging = true
 entryPoint = "https"
-onHostRule = true
-[acme.httpChallenge]
-entryPoint = "http"
 
+[acme.dnsChallenge]
+   # DNS provider name, see https://doc.traefik.io/traefik/v1.7/configuration/acme/#provider
+  provider = "route53"
+  delayBeforeCheck = 0
+
+[[acme.domains]]
+  # Wildcard certificate for demo.approov.io, also covering deeply nested domains
+  main = "*.demo.approov.io"
+  sans = ["demo.approov.io",
+    "*.phoenix-absinthe-graphql.demo.approov.io",
+    "*.phoenix-channels.demo.approov.io",
+    "*.shipraider.demo.approov.io"]
+
+[[acme.domains]]
+  # Wildcard certificate for shapes.approov.io, which is the canonical domain
+  # published in the Approov frontend integration quickstarts
+  main = "*.shapes.approov.io"
+  sans = ["shapes.approov.io"]

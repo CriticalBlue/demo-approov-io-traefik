@@ -12,7 +12,7 @@ Now grab the IP address for it in order to point a domain to it.
 
 ## DOMAIN DNS SETUP
 
-Before starting the setup a domain needs to be set-ed to point at the EC2 instance.
+Before starting the setup a domain needs to be set to point at the EC2 instance.
 
 For example if the `demo.example.com` is used, then each backend added will use it as their base domain. So when adding a backend for the python shapes api you give it the domain in the likes of `python-shapes.demo.example.com`, and for nodejs `nodejs-shapes.demo.example.com`.
 
@@ -164,7 +164,7 @@ sudo docker-compose logs -f
 
 ## ADD A CONTAINER TO TRAEFIK
 
-> **NOTE:** No need to follow this for the above Deploy Server Example. You only need to follow this part when your project doesn't have yet Traekik labels in the `docker-compose.yml` file.
+> **NOTE:** No need to follow this for the above Deploy Server Example. You only need to follow this part when your project doesn't have yet Traefik labels in the `docker-compose.yml` file.
 
 Traefik inspects the labels in all running docker containers to know for what ones needs to proxy requests.
 
