@@ -40,12 +40,9 @@ entryPoint = "https"
   delayBeforeCheck = 0
 
 [[acme.domains]]
-  # Wildcard certificate for demo.approov.io, also covering deeply nested domains
+  # Wildcard certificate for demo.approov.io, also covering subdomains
   main = "*.demo.approov.io"
-  sans = ["demo.approov.io",
-    "*.phoenix-absinthe-graphql.demo.approov.io",
-    "*.phoenix-channels.demo.approov.io",
-    "*.shipraider.demo.approov.io"]
+  sans = ["demo.approov.io"]
 
 [[acme.domains]]
   # Wildcard certificate for shapes.approov.io, which is the canonical domain

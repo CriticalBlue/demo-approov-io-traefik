@@ -1,66 +1,53 @@
-# AWS EC2 TRAEFIK SETUP
+# AWS EC2 TRAEFIK SETUP FOR DEMO.APPROOV.IO
 
-[Traefik](https://containo.us/traefik/) setup to run all docker containers on AWS EC2 instances behind the same port 80 and 443 with automated LetsEncrypt certificates creation and renewal.
-
-
-## CREATE A NEW AWS EC2 INSTANCE
-
-First of all create new AWS EC2 instance, otherwise you need to guarantee that the existing one doesn't have anything listening on port `80` or port `443`.
-
-Now grab the IP address for it in order to point a domain to it.
+[Traefik](https://traefik.io/traefik/) setup to run all docker containers on an AWS EC2 instance behind the same ports, 80 and 443, with automated Let'sEncrypt certificates creation and renewal.
 
 
-## DOMAIN DNS SETUP
+## CREATE AN AWS EC2 INSTANCE
 
-Before starting the setup a domain needs to be set to point at the EC2 instance.
+Create a new AWS EC2 instance, otherwise you need to ensure that the existing one you are re-using does not have anything listening on port `80` or port `443`.
+The instance needs to have about 4GB RAM and 16GB disk space for building the docker containers for the services. Use a t3.medium initially - this can be reduced to a t3.small after setup is complete.
+To resize an instance, stop the instance, select it and then
+- To change the type: Actions → Instance Settings → Change Instance Type (see Amazon EC2 T3 Instances)
+- To change the amount of storage: in the instance details’ Storage tab, click on the volume ID, then Actions → Modify volume.
 
-For example if the `demo.example.com` is used, then each backend added will use it as their base domain. So when adding a backend for the python shapes api you give it the domain in the likes of `python-shapes.demo.example.com`, and for nodejs `nodejs-shapes.demo.example.com`.
+Make sure inbound rules allow access to the instance. You will need to login to the instance, so you need to enable SSH access on port 22 from your current IP in the instance's security policy.
+For example (security group rule IDs and source for SSH will differ based on your configuration and location):
 
-Go ahead and configure a domain at Route53 or at any other provider, and point it to the IP address from the previous step.
+| Security group rule ID | IP version | Type       | Protocol | Port range | Source     |
+| ---------------------- | ---------- | ---------- | -------- | ---------- | ---------- |
+| sgr-0123456789abcdef0  | IPv4       | HTTP       | TCP      | 80         | 0.0.0.0/0  |
+| sgr-0123456789abcdef0  | IPv4       | HTTPS      | TCP      | 443        | 0.0.0.0/0  |
+| sgr-0123456789abcdef0  | IPv4       | SSH        | TCP      | 22         | 1.2.3.4/32 |
 
-> **NOTE:** It's important that you add also a wild-card entry in the DNS record to point any sub-domain to the same IP.
+Attach an elastic IP to the instance to permit starting and stopping of the instance without having to update the IP in DNS. Take note of the elastic IP address of the EC2 instance for use in the next step.
 
 
-## FIREWALL SETUP
+## SET UP DNS DOMAINS
 
-Ensure that port `80` and `443` are open.
+Before starting the setup of services, a domain needs to be configured for the EC2 instance. These instructions are for the domains `demo.approov.io` and `shapes.approov.io` in AWS Route 53 (but would work similarly for any other provider). Each service added to the demo server will use one of these as its base domain. So when adding a backend for the python shapes API you could give it the domain `python-shapes.demo.approov.io`, and for nodejs `nodejs-shapes.demo.approov.io`, respectively.
+
+Configure a domain at Route 53 and point it to the elastic IP address from the previous step. Create a new hosted zone (AWS Console → Route 53 → Hosted Zones → Create hosted zone) called `demo.approov.io`. Ensure that an A-type DNS record pointing to the EC2 instance's elastic IP exists in the hosted zone demo.approov.io. Also add an A-type wild-card DNS record (*.demo.approov.io) to route any sub-domain to the same IP. Replicate the auto generated NS-type record in the hosted zone `demo.approov.io` to the hosted zone approov.io in order to make the new hosted zone’s name servers known in `approov.io`. Repeat these steps for `shapes.approov.io`.
 
 
-## AWS EC2 INSTANCE SETUP
+## SET UP THE AWS EC2 INSTANCE
+
+Log into the demo server AWS EC2 instance. The SSH key for demo.approov.io is in approov-dev → SSH Keys → Approov Demo Server. The destination for login is ec2-user@demo.approov.io.
 
 ### Install Git
 
 ```
-yum install -y git
+yum install -y --skip-broken git
 ```
 
-### SSH Key
-
-If the instance already has one, then just `cat ~/.ssh/id_rsa.pub` and add it to your Gitlab/Github account, otherwise create it first.
-
-
-### Instance Setup
+### Traefik Setup
 
 #### Cloning this repository
 
-Let's start by cloning this repository:
+Start by cloning this repository:
 
 ```
-git clone https://github.com/approov/aws-ec2-traefik-setup.git && cd aws-ec2-traefik-setup
-```
-
-#### The Traefik environment file
-
-Creating the `.env` file for Traefik:
-
-```
-sudo mkdir /opt/traefik && sudo cp ./traefik/.env.example /opt/traefik/.env
-```
-
-Customize the `env.` file with your values:
-
-```
-sudo nano /opt/traefik/.env
+git clone https://github.com/CriticalBlue/demo-approov-io-traefik.git && cd demo-approov-io-traefik
 ```
 
 #### Run the setup
@@ -108,20 +95,93 @@ This setup script will let Traefik running and listening for incoming requests o
 
 ## TLS CERTIFICATES
 
-Traefik uses LetsEncrypt to automatically generated and renew TLS certificates for all domains is listening on, and the will keep the public key unchanged, thus a mobile app can implement certificate pinning against the public key without the concern of having the pin changed at each renewal of the certificate.
+Traefik uses LetsEncrypt to automatically generate and renew TLS certificates for all domains it is listening on, and it will keep the public key unchanged, thus a mobile app can implement certificate pinning against the public key without the concern of having the pin changed at each renewal of the certificate.
+
+## SET UP ROUTE 53 FOR A DNS-01 CHALLENGE
+
+Give the demo server EC2 instance an IAM role that permits it to write the necessary TXT-type record for the DNS-01 challenge to Route 53 DNS.
+1 Create an IAM policy (AWS → IAM → Policies → Create policy) called demo-approov-io-dns-01, with description “Minimum permissions required for a DNS-01 challenge performed by Traefik”, the hosted zone IDs of demo.approov.io and shapes.approov.io and the correct TXT-type record names derived from the corresponding domain names:
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "route53:GetChange",
+      "Resource": "arn:aws:route53:::change/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "route53:ListHostedZonesByName",
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "route53:ListResourceRecordSets"
+      ],
+      "Resource": [
+        "arn:aws:route53:::hostedzone/<hosted zone ID of demo.approov.io>"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "route53:ListResourceRecordSets"
+      ],
+      "Resource": [
+        "arn:aws:route53:::hostedzone/<hosted zone ID of shapes.approov.io>"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "route53:ChangeResourceRecordSets"
+      ],
+      "Resource": [
+        "arn:aws:route53:::hostedzone/<hosted zone ID of demo.approov.io>"
+      ],
+      "Condition": {
+        "ForAllValues:StringEquals": {
+         "route53:ChangeResourceRecordSetsNormalizedRecordNames": [
+            "_acme-challenge.demo.approov.io"
+          ],
+          "route53:ChangeResourceRecordSetsRecordTypes": [
+            "TXT"
+          ]
+        }
+      }
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "route53:ChangeResourceRecordSets"
+      ],
+      "Resource": [
+        "arn:aws:route53:::hostedzone/<hosted zone ID of shapes.approov.io>"
+      ],
+      "Condition": {
+        "ForAllValues:StringEquals": {
+         "route53:ChangeResourceRecordSetsNormalizedRecordNames": [
+            "_acme-challenge.shapes.approov.io"
+          ],
+          "route53:ChangeResourceRecordSetsRecordTypes": [
+            "TXT"
+          ]
+        }
+      }
+    }
+  ]
+}
+2 Create an IAM role (IAM → Roles → Create role) with trusted entity type "AWS service" and use case "EC2". Next, select the policy demo-approov-io-dns-01 and enter the role name "demo-server" and description "Allows demo-server EC2 instance to perform a DNS-01 challenge for demo.approov.io and shapes.approov.io through Traefik and LetsEncrypt".
+3 Add the IAM role to the demo server EC2 instance (AWS → EC2 → Instances. Select the instance Combined Demo Server. Actions → Security → Modify IAM role. Select IAM Role: demo-server, Update IAM role).
+4. Restart Traefik to allow it to request the certificate from LetsEncrypt.
 
 
-## DEPLOY SERVER EXAMPLE
+## EXAMPLE: DEPLOYING A SERVICE
 
-Let's see an example of deploying Python Shapes API backend into an EC2 instance listening at `*.demo.example.com`.
+Let's see an example of deploying the Python Shapes API backend into an EC2 instance listening at `*.demo.approov.io`.
 
-#### Create the folder
-
-```
-mkdir -p ~/backend && cd ~/backend
-```
-
-#### Clone the repo
+#### Clone the Repo
 
 ```
 git clone https://github.com/approov/python-flask_approov-shapes-api-server && cd python-flask_approov-shapes-api-server
@@ -138,7 +198,7 @@ cp .env.example .env
 Replace the default domain with your own server domain:
 
 ```bash
-PYTHON_FLASK_SHAPES_DOMAIN=python-shapes.demo.example.com
+PYTHON_FLASK_SHAPES_DOMAIN=python-shapes.demo.approov.io
 ```
 
 Replace the dummy Approov secret on it with the one for your Approov account:
@@ -154,21 +214,21 @@ APPROOV_BASE64_SECRET=your-secret-here
 sudo docker-compose up -d
 ```
 
-Now in your browser visit `python-shapes.demo.example.com` to check the server is accepting requests.
+Now visit `python-shapes.demo.approov.io` in your browser to check the server is accepting requests.
 
-#### Tail the logs
+#### Inspect the logs
 
 ```
 sudo docker-compose logs -f
 ```
 
-## ADD A CONTAINER TO TRAEFIK
+## EXAMPLE: ADDING A CONTAINER TO TRAEFIK
 
-> **NOTE:** No need to follow this for the above Deploy Server Example. You only need to follow this part when your project doesn't have yet Traefik labels in the `docker-compose.yml` file.
+> **NOTE:** The following is not required for the above Deploying a Service Example. You only need to follow this part if your project does not have Traefik labels in the `docker-compose.yml` file.
 
-Traefik inspects the labels in all running docker containers to know for what ones needs to proxy requests.
+Traefik inspects the labels in all running docker containers to know for which ones it needs to proxy requests.
 
-So if your backend does not have yet support for Traefik in the `docker-compose.yml` file you can configure your service like this:
+So if your backend does not yet have support for Traefik in the `docker-compose.yml` file, you can configure your service like this:
 
 ```yml
 services:
@@ -180,10 +240,10 @@ services:
             - "traefik.enable=true"
 
             # The public domain name for your docker container
-            - "traefik.frontend.rule=Host:api.demo.example.com"
+            - "traefik.frontend.rule=Host:api.demo.approov.io"
 
-            # Doesn't need to be exactly the same as the domain name.
-            - "traefik.backend=api.demo.example.com"
+            # Does not need to be exactly the same as the domain name.
+            - "traefik.backend=api.demo.approov.io"
 
             # The external docker network that Traefik uses to proxy request to containers.
             - "traefik.docker.network=traefik"
@@ -200,4 +260,4 @@ networks:
 
 ```
 
-With this configuration all requests for `https://api.demo.example.com` will be proxy by Traefik to the docker container with the backend label `traefik.backend=api.demo.example.com` on the internal container network port `traefik.port=5000`.
+With this configuration all requests for `https://api.demo.approov.io` will be proxy by Traefik to the docker container with the backend label `traefik.backend=api.demo.approov.io` on the internal container network port `traefik.port=5000`.

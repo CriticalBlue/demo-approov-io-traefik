@@ -5,13 +5,13 @@ set -eu
 Setup_Depedencies() {
     printf "\n---> INSTALL DEPENDENCIES <---\n"
     sudo yum update -y
-    sudo yum install -y git curl
+    sudo yum install -y --skip-broken git curl
 }
 
 Setup_Docker() {
     printf "\n---> INSTALL DOCKER <---\n"
-    sudo amazon-linux-extras install -y docker
-    sudo service docker start
+    sudo yum install docker
+    sudo systemctl start docker
 }
 
 Setup_Docker_Compose() {
@@ -37,29 +37,11 @@ Setup_Traefik() {
     # Creates a docker network that will be used by Traefik to proxy the requests to the docker containers:
     sudo docker network create traefik || true
 
-    if [ ! -f ./.env ]; then
-        printf "\n
-        ===> ERROR:
-
-        Please copy the .env.example file to .env:
-        $ sudo cp ./traefik/.env.example /opt/traefik/.env
-
-        Now customize it to your values with:
-        $ sudo nano /opt/traefik/.env
-
-        Afterwards just re-run the setup again:
-        $ ./aws-ec2-setup.sh
-
-        \n"
-
-        exit 1
-    fi
-
     # Traefik will be listening on port 80 and 443, and proxy the requests to
     #  the associated container for the domain. Check the README for more details.
     sudo docker-compose up -d traefik
 
-    # Just give sometime for it to start in order to check the logs afterwards.
+    # Just give some time for it to start in order to check the logs afterwards.
     sleep 5
 
     printf "\n---> CHECK TRAEFIK LOGS <---\n"
