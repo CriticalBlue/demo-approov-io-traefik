@@ -8,10 +8,10 @@
 Create a new AWS EC2 instance, otherwise you need to ensure that the existing one you are re-using does not have anything listening on port `80` or port `443`.
 The instance needs to have about 4GB RAM and 16GB disk space for building the docker containers for the services. Use a t3.medium initially - this can be reduced to a t3.small after setup is complete.
 To resize an instance, stop the instance, select it and then
-- To change the type: Actions → Instance Settings → Change Instance Type (see Amazon EC2 T3 Instances)
+- To change the type: Actions → Instance Settings → Change Instance Type (see [Amazon EC2 T3 Instances](https://aws.amazon.com/ec2/instance-types/t3/))
 - To change the amount of storage: in the instance details’ Storage tab, click on the volume ID, then Actions → Modify volume.
 
-You will need to login to the instance, so you need to add an SSH key pair to the EC2 instance (see [Add or remove a public key on your instance - AWS](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/replacing-key-pair.html).
+You will need to login to the instance, so you need to add an SSH key pair to the EC2 instance (see [Add or remove a public key on your instance - AWS](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/replacing-key-pair.html)).
 
 Make sure inbound rules allow access to the instance. Enable SSH access on port 22 from your current IP in the instance's security policy.
 For example (security group rule IDs and source for SSH will differ based on your configuration and location):
@@ -27,7 +27,7 @@ Attach an elastic IP to the instance to permit starting and stopping of the inst
 
 ## SET UP DNS DOMAINS
 
-Before starting the setup of services, a domain needs to be configured for the EC2 instance. These instructions are for the domains `demo.approov.io` and `shapes.approov.io` in AWS Route 53 (but would work similarly for any other provider). Each service added to the demo server will use one of these as its base domain. So when adding a backend for the python shapes API you could give it the domain `python-shapes.demo.approov.io`, and for nodejs `nodejs-shapes.demo.approov.io`, respectively.
+Before starting the setup of services, a domain needs to be configured for the EC2 instance. These instructions are for the domains `demo.approov.io` and `shapes.approov.io` in AWS Route 53 (but would work similarly for another domain or provider). Each service added to the demo server will use one of these as its base domain. So when adding a backend for the python shapes API you could give it the domain `python-shapes.demo.approov.io`, and for nodejs `nodejs-shapes.demo.approov.io`, respectively.
 
 Configure a domain at Route 53 and point it to the elastic IP address from the previous step. Create a new hosted zone (AWS Console → Route 53 → Hosted Zones → Create hosted zone) called `demo.approov.io`. Ensure that an A-type DNS record pointing to the EC2 instance's elastic IP exists in the hosted zone `demo.approov.io`. Also add an A-type wild-card DNS record (`*.demo.approov.io`) to route any sub-domain to the same IP. Replicate the auto generated NS-type record in the hosted zone `demo.approov.io` to the hosted zone approov.io in order to make the new hosted zone’s name servers known in `approov.io`. Repeat these steps for `shapes.approov.io`.
 
