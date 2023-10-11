@@ -11,14 +11,16 @@ To resize an instance, stop the instance, select it and then
 - To change the type: Actions → Instance Settings → Change Instance Type (see Amazon EC2 T3 Instances)
 - To change the amount of storage: in the instance details’ Storage tab, click on the volume ID, then Actions → Modify volume.
 
-Make sure inbound rules allow access to the instance. You will need to login to the instance, so you need to enable SSH access on port 22 from your current IP in the instance's security policy.
+You will need to login to the instance, so you need to add an SSH key pair to the EC2 instance (see [Add or remove a public key on your instance - AWS](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/replacing-key-pair.html).
+
+Make sure inbound rules allow access to the instance. Enable SSH access on port 22 from your current IP in the instance's security policy.
 For example (security group rule IDs and source for SSH will differ based on your configuration and location):
 
 | Security group rule ID | IP version | Type       | Protocol | Port range | Source     |
 | ---------------------- | ---------- | ---------- | -------- | ---------- | ---------- |
 | sgr-0123456789abcdef0  | IPv4       | HTTP       | TCP      | 80         | 0.0.0.0/0  |
 | sgr-0123456789abcdef0  | IPv4       | HTTPS      | TCP      | 443        | 0.0.0.0/0  |
-| sgr-0123456789abcdef0  | IPv4       | SSH        | TCP      | 22         | 1.2.3.4/32 |
+| sgr-0123456789abcdef0  | IPv4       | SSH        | TCP      | 22         | `<your IP address>`/32 |
 
 Attach an elastic IP to the instance to permit starting and stopping of the instance without having to update the IP in DNS. Take note of the elastic IP address of the EC2 instance for use in the next step.
 
@@ -27,14 +29,24 @@ Attach an elastic IP to the instance to permit starting and stopping of the inst
 
 Before starting the setup of services, a domain needs to be configured for the EC2 instance. These instructions are for the domains `demo.approov.io` and `shapes.approov.io` in AWS Route 53 (but would work similarly for any other provider). Each service added to the demo server will use one of these as its base domain. So when adding a backend for the python shapes API you could give it the domain `python-shapes.demo.approov.io`, and for nodejs `nodejs-shapes.demo.approov.io`, respectively.
 
-Configure a domain at Route 53 and point it to the elastic IP address from the previous step. Create a new hosted zone (AWS Console → Route 53 → Hosted Zones → Create hosted zone) called `demo.approov.io`. Ensure that an A-type DNS record pointing to the EC2 instance's elastic IP exists in the hosted zone demo.approov.io. Also add an A-type wild-card DNS record (*.demo.approov.io) to route any sub-domain to the same IP. Replicate the auto generated NS-type record in the hosted zone `demo.approov.io` to the hosted zone approov.io in order to make the new hosted zone’s name servers known in `approov.io`. Repeat these steps for `shapes.approov.io`.
+Configure a domain at Route 53 and point it to the elastic IP address from the previous step. Create a new hosted zone (AWS Console → Route 53 → Hosted Zones → Create hosted zone) called `demo.approov.io`. Ensure that an A-type DNS record pointing to the EC2 instance's elastic IP exists in the hosted zone `demo.approov.io`. Also add an A-type wild-card DNS record (`*.demo.approov.io`) to route any sub-domain to the same IP. Replicate the auto generated NS-type record in the hosted zone `demo.approov.io` to the hosted zone approov.io in order to make the new hosted zone’s name servers known in `approov.io`. Repeat these steps for `shapes.approov.io`.
 
 
 ## SET UP THE AWS EC2 INSTANCE
 
-Log into the demo server AWS EC2 instance. The SSH key for demo.approov.io is in approov-dev → SSH Keys → Approov Demo Server. The destination for login is ec2-user@demo.approov.io.
+Log into the demo server AWS EC2 instance using the ssh private key from the key pair that you used when you created the EC2 instance. The destination for login is `ec2-user@demo.approov.io`:
+```bash
+ssh -i /path/key-pair-name.pem ec2-user@demo.approov.io
+```
+
+A more convenient way is to use key management software, for example saving the key in KeePassXC and using this to add the key to SSH agent when needed. This allows login without providing the key on the command line:
+```bash
+ssh ec2-user@demo.approov.io
+```
 
 ### Install Git
+
+Once logged in to the EC2 instance, install Git.
 
 ```
 yum install -y --skip-broken git
@@ -95,86 +107,90 @@ This setup script will let Traefik running and listening for incoming requests o
 
 ## TLS CERTIFICATES
 
-Traefik uses LetsEncrypt to automatically generate and renew TLS certificates for all domains it is listening on, and it will keep the public key unchanged, thus a mobile app can implement certificate pinning against the public key without the concern of having the pin changed at each renewal of the certificate.
+Traefik uses LetsEncrypt to automatically generate and renew TLS certificates for all domains it is listening on, and it will keep the public key unchanged, thus a mobile app can implement certificate pinning against the public key without the concern of having the pin changed at each renewal of the certificate. Let's Encrypt issues wildcard certificates only through using a DNS-01 challenge.
 
-## SET UP ROUTE 53 FOR A DNS-01 CHALLENGE
+### SET UP ROUTE 53 FOR A DNS-01 CHALLENGE
 
 Give the demo server EC2 instance an IAM role that permits it to write the necessary TXT-type record for the DNS-01 challenge to Route 53 DNS.
-1 Create an IAM policy (AWS → IAM → Policies → Create policy) called demo-approov-io-dns-01, with description “Minimum permissions required for a DNS-01 challenge performed by Traefik”, the hosted zone IDs of demo.approov.io and shapes.approov.io and the correct TXT-type record names derived from the corresponding domain names:
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": "route53:GetChange",
-      "Resource": "arn:aws:route53:::change/*"
-    },
-    {
-      "Effect": "Allow",
-      "Action": "route53:ListHostedZonesByName",
-      "Resource": "*"
-    },
-    {
-      "Effect": "Allow",
-      "Action": [
-        "route53:ListResourceRecordSets"
-      ],
-      "Resource": [
-        "arn:aws:route53:::hostedzone/<hosted zone ID of demo.approov.io>"
-      ]
-    },
-    {
-      "Effect": "Allow",
-      "Action": [
-        "route53:ListResourceRecordSets"
-      ],
-      "Resource": [
-        "arn:aws:route53:::hostedzone/<hosted zone ID of shapes.approov.io>"
-      ]
-    },
-    {
-      "Effect": "Allow",
-      "Action": [
-        "route53:ChangeResourceRecordSets"
-      ],
-      "Resource": [
-        "arn:aws:route53:::hostedzone/<hosted zone ID of demo.approov.io>"
-      ],
-      "Condition": {
-        "ForAllValues:StringEquals": {
-         "route53:ChangeResourceRecordSetsNormalizedRecordNames": [
-            "_acme-challenge.demo.approov.io"
-          ],
-          "route53:ChangeResourceRecordSetsRecordTypes": [
-            "TXT"
-          ]
+1. Create an IAM policy (AWS → IAM → Policies → Create policy) called demo-approov-io-dns-01, with description “Minimum permissions required for a DNS-01 challenge performed by Traefik”, the hosted zone IDs of `demo.approov.io` and `shapes.approov.io` and the correct TXT-type record names derived from the corresponding domain names:
+```json
+  {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Effect": "Allow",
+        "Action": "route53:GetChange",
+        "Resource": "arn:aws:route53:::change/*"
+      },
+      {
+        "Effect": "Allow",
+        "Action": "route53:ListHostedZonesByName",
+        "Resource": "*"
+      },
+      {
+        "Effect": "Allow",
+        "Action": [
+          "route53:ListResourceRecordSets"
+        ],
+        "Resource": [
+          "arn:aws:route53:::hostedzone/<hosted zone ID of demo.approov.io>"
+        ]
+      },
+      {
+        "Effect": "Allow",
+        "Action": [
+          "route53:ListResourceRecordSets"
+        ],
+        "Resource": [
+          "arn:aws:route53:::hostedzone/<hosted zone ID of shapes.approov.io>"
+        ]
+      },
+      {
+        "Effect": "Allow",
+        "Action": [
+          "route53:ChangeResourceRecordSets"
+        ],
+        "Resource": [
+          "arn:aws:route53:::hostedzone/<hosted zone ID of demo.approov.io>"
+        ],
+        "Condition": {
+          "ForAllValues:StringEquals": {
+          "route53:ChangeResourceRecordSetsNormalizedRecordNames": [
+              "_acme-challenge.demo.approov.io"
+            ],
+            "route53:ChangeResourceRecordSetsRecordTypes": [
+              "TXT"
+            ]
+          }
+        }
+      },
+      {
+        "Effect": "Allow",
+        "Action": [
+          "route53:ChangeResourceRecordSets"
+        ],
+        "Resource": [
+          "arn:aws:route53:::hostedzone/<hosted zone ID of shapes.approov.io>"
+        ],
+        "Condition": {
+          "ForAllValues:StringEquals": {
+          "route53:ChangeResourceRecordSetsNormalizedRecordNames": [
+              "_acme-challenge.shapes.approov.io"
+            ],
+            "route53:ChangeResourceRecordSetsRecordTypes": [
+              "TXT"
+            ]
+          }
         }
       }
-    },
-    {
-      "Effect": "Allow",
-      "Action": [
-        "route53:ChangeResourceRecordSets"
-      ],
-      "Resource": [
-        "arn:aws:route53:::hostedzone/<hosted zone ID of shapes.approov.io>"
-      ],
-      "Condition": {
-        "ForAllValues:StringEquals": {
-         "route53:ChangeResourceRecordSetsNormalizedRecordNames": [
-            "_acme-challenge.shapes.approov.io"
-          ],
-          "route53:ChangeResourceRecordSetsRecordTypes": [
-            "TXT"
-          ]
-        }
-      }
-    }
-  ]
-}
-2 Create an IAM role (IAM → Roles → Create role) with trusted entity type "AWS service" and use case "EC2". Next, select the policy demo-approov-io-dns-01 and enter the role name "demo-server" and description "Allows demo-server EC2 instance to perform a DNS-01 challenge for demo.approov.io and shapes.approov.io through Traefik and LetsEncrypt".
-3 Add the IAM role to the demo server EC2 instance (AWS → EC2 → Instances. Select the instance Combined Demo Server. Actions → Security → Modify IAM role. Select IAM Role: demo-server, Update IAM role).
+    ]
+  }
+```
+2. Create an IAM role (IAM → Roles → Create role) with trusted entity type "AWS service" and use case "EC2". Next, select the policy demo-approov-io-dns-01 and enter the role name "demo-server" and description "Allows demo-server EC2 instance to perform a DNS-01 challenge for `demo.approov.io` and shapes.approov.io through Traefik and LetsEncrypt".
+3. Add the IAM role to the demo server EC2 instance (AWS → EC2 → Instances. Select the instance Combined Demo Server. Actions → Security → Modify IAM role. Select IAM Role: demo-server, Update IAM role).
 4. Restart Traefik to allow it to request the certificate from LetsEncrypt.
+
+This completes the setup. Read on for examples on how to configure and deploy a service to run on the server.
 
 
 ## EXAMPLE: DEPLOYING A SERVICE
