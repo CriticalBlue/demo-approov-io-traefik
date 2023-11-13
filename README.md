@@ -59,7 +59,7 @@ yum install -y --skip-broken git
 Start by cloning this repository:
 
 ```
-git clone https://github.com/CriticalBlue/demo-approov-io-traefik.git && cd demo-approov-io-traefik
+git clone https://github.com/criticalblue/demo-approov-io-traefik.git && cd demo-approov-io-traefik
 ```
 
 #### Run the setup
@@ -200,7 +200,7 @@ Let's see an example of deploying the Python Shapes API backend into an EC2 inst
 #### Clone the Repo
 
 ```
-git clone https://github.com/approov/python-flask_approov-shapes-api-server && cd python-flask_approov-shapes-api-server
+git clone https://github.com/approov/quickstart-python-flask-token-check && cd quickstart-python-flask-token-check/servers/shapes-api
 ```
 
 #### Create the .env file
@@ -214,7 +214,7 @@ cp .env.example .env
 Replace the default domain with your own server domain:
 
 ```bash
-PYTHON_FLASK_SHAPES_DOMAIN=python-shapes.demo.approov.io
+PYTHON_FLASK_SHAPES_DOMAIN=shapes-python-flask.demo.approov.io
 ```
 
 Replace the dummy Approov secret on it with the one for your Approov account:
@@ -230,7 +230,7 @@ APPROOV_BASE64_SECRET=your-secret-here
 sudo docker-compose up -d
 ```
 
-Now visit `python-shapes.demo.approov.io` in your browser to check the server is accepting requests.
+Now visit `shapes-python-flask.demo.approov.io` in your browser to check the server is accepting requests.
 
 #### Inspect the logs
 

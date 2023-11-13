@@ -4,6 +4,9 @@ debug = false
 # Available options: DEBUG, INFO, WARN, ERROR (the default), FATAL and PANIC
 logLevel = "ERROR"
 
+# Uncomment to print access logs on stdout
+# [accessLog]
+
 # Entrypoints to be used by frontends that do not specify any entrypoint.
 # Each frontend can specify its own entrypoints.
 defaultEntryPoints = ["https", "http"]
@@ -17,6 +20,9 @@ defaultEntryPoints = ["https", "http"]
   [entryPoints.https]
   address = ":443"
   [entryPoints.https.tls]
+
+  [entryPoints.grpc]
+  address = ":50051"
 
 [retry]
 

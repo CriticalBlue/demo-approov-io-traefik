@@ -7,6 +7,8 @@ services:
     ports:
       - 80:80
       - 443:443
+      # GRPC
+      - 50051:50051
     networks:
       - traefik
     volumes:
